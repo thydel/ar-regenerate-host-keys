@@ -1,0 +1,39 @@
+---
+
+- name: get md5 of remote key
+  register: remote
+  stat:
+    path: '{{ key }}'
+
+- name: get md5 of template key
+  delegate_to: localhost
+  connection: local
+  register: local
+  stat:
+    path: '{{ playbook_dir }}/{{ template }}{{ key }}'
+
+- when: remote.stat.md5 == local.stat.md5
+  block:
+
+  - name: remove old keys
+    shell: rm /etc/ssh/ssh_host_*
+
+  - name: Regenerate OpenSSH Host Keys
+    notify: restart sshd
+    command: dpkg-reconfigure openssh-server
+
+  - name: Forget previouly known keys for this host on bastion
+    when: bastion is defined
+    become: False
+    delegate_to: '{{ bastion }}'
+    known_hosts:
+      name: '{{ node }}.{{ adm_net }}'
+      state: absent
+
+  - name: Forget previouly known keys for this host on localhost
+    become: False
+    delegate_to: localhost
+    connection: local
+    known_hosts:
+      name: '{{ ansible_host }}'
+      state: absent
