@@ -35,18 +35,20 @@
 
   - { command: ssh-keygen -A, name: regenerate OpenSSH ecdsa keys }
 
-  - name: Forget previouly known keys for this host on bastion
-    when: bastion is defined and net is defined
-    become: False
-    delegate_to: '{{ bastion }}'
-    known_hosts:
-      name: '{{ inventory_hostname }}.{{ net }}'
-      state: absent
+  - become: False
+    block:
 
-  - name: Forget previouly known keys for this host on localhost
-    become: False
-    delegate_to: localhost
-    connection: local
-    known_hosts:
-      name: '{{ ansible_host }}'
-      state: absent
+    - name: Forget previouly known keys for this host on bastion
+      when: bastion is defined and net is defined
+      delegate_to: '{{ bastion }}'
+      known_hosts:
+        name: '{{ inventory_hostname }}.{{ net }}'
+        state: absent
+
+    - set_fact: { saved_ansible_ssh_host: '{{ ansible_ssh_host }}' }
+    - name: Forget previouly known keys for this host on localhost
+      delegate_to: localhost
+      connection: local
+      known_hosts:
+        name: '{{ saved_ansible_ssh_host }}'
+        state: absent
