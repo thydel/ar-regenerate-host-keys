@@ -2,32 +2,45 @@
 
 - name: get md5 of remote key
   register: remote
-  stat:
-    path: '{{ key }}'
+  stat: { path: '{{ key }}' }
 
 - name: get md5 of template key
   delegate_to: localhost
   connection: local
   register: local
-  stat:
-    path: '{{ playbook_dir }}/{{ template }}{{ key }}'
+  stat: { path: '{{ playbook_dir }}/{{ template }}{{ key }}' }
 
-- when: remote.stat.md5 == local.stat.md5
+- when: (remote.stat.md5 == local.stat.md5) or (force is defined and force)
   block:
 
-  - name: remove old keys
-    shell: rm /etc/ssh/ssh_host_*
+  - { command: ssh-keygen -A, name: ensure ecdsa key exists }
 
-  - name: Regenerate OpenSSH Host Keys
-    notify: restart sshd
-    command: dpkg-reconfigure openssh-server
+  - name: find ecdsa keys
+    find: { path: /etc/ssh, patterns: ssh_host_ecdsa* }
+    register: ecdsa_keys
+
+  - name: find all keys
+    find: { path: /etc/ssh, patterns: ssh_host_* }
+    register: keys
+
+  - name: remove all but ecdsa_keys
+    file: &absent { state: absent, path: '{{ item }}' }
+    with_items: "{{ keys.files | map(attribute='path') | difference(ecdsa_keys.files | map(attribute='path')) | list }}"
+
+  - { command: ssh-keygen -A, name: regenerate OpenSSH all Host Keys but ecdsa }
+
+  - name: remove ecdsa_keys
+    file: *absent
+    with_items: "{{ ecdsa_keys.files | map(attribute='path') | list }}"
+
+  - { command: ssh-keygen -A, name: regenerate OpenSSH ecdsa keys }
 
   - name: Forget previouly known keys for this host on bastion
-    when: bastion is defined
+    when: bastion is defined and net is defined
     become: False
     delegate_to: '{{ bastion }}'
     known_hosts:
-      name: '{{ node }}.{{ adm_net }}'
+      name: '{{ inventory_hostname }}.{{ net }}'
       state: absent
 
   - name: Forget previouly known keys for this host on localhost
