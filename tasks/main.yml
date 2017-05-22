@@ -33,7 +33,7 @@
     file: *absent
     with_items: "{{ ecdsa_keys.files | map(attribute='path') | list }}"
 
-  - { command: ssh-keygen -A, name: regenerate OpenSSH ecdsa keys }
+  - { command: ssh-keygen -A, name: regenerate OpenSSH ecdsa keys, notify: restart sshd }
 
   - become: False
     block:
